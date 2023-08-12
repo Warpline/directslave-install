@@ -36,15 +36,14 @@ allow-query     { any; };
 <br>              allow-transfer  { DirectSlave_IP_server_1, DirectSlave_IP_server_2; };
 
 # What's New? #
-Installing DirectSlave including DirectSlave 3.2 with XSS patch
+Installing DirectSlave including DirectSlave 3.4.3
 <br>Root install check
 <br>Remove fail2ban and migrate to Firewalld
 <br>SSHD port updating
 <br>Install check
 <br>Added support for AlmaLinux 8
-<br>Updated DirectSlave to latest 3.4.3 version
 
 # References #
 Original script by jordivn at https://forum.directadmin.com/showthread.php?t=43924&page=22&p=278112#post278112
 <br>DirectSlave software from https://directslave.com/download
-<br>VPS server provided by https://e-padi.com
+<br>Updates provided by Warpline Hosting at https://www.warpline.com/
