@@ -1,28 +1,33 @@
 #!/bin/sh
 # @author jordavin,phillcoxon,mantas15
 # @updated by Afrizal-id
+# @Forked and updated by Warpline.
 # @date 07.12.2019
-# @version 1.0.5
-# @source 
+# @version 1.1.0 (for AlmaLinux 8)
 # ------------------------------------------------------------------------------
+
 sshport=22;
+
 #Check that user is root.
 if [ “$(id -u)” = “0” ]; then
-printf "Bingo! you are root. Continue on....\n"
-  else
-printf "Sorry, This script must be run as root\n"
-exit;
+  printf "Bingo! you are root. Continue on....\n"
+else
+  printf "Sorry, This script must be run as root\n"
+  exit;
 fi
+
 #What Distro are you on?
 printf "Distro are you on??\n" 2>&1
-OS='cat /etc/redhat-release | awk {'print $1}'
-if [ "$OS" = "CentOS" ]; then
-echo "System runs on CentOS 7.X. Checking Continue on....";
-VN='cat /etc/redhat-release | awk {'print $3}'
-else [ "$VN" != "7.*" ]; elseif
-echo "Installation failed. System runs on unsupported Linux. Exiting...";
-exit;
+OS=$(cat /etc/redhat-release | awk '{print $1}')
+if [ "$OS" = "AlmaLinux" ]; then
+  echo "System runs on AlmaLinux 8.X. Checking Continue on....";
+  VN=$(cat /etc/redhat-release | awk '{print $3}')
+else
+  echo "Installation failed. System runs on unsupported Linux. Exiting...";
+  exit;
 fi 
+
+#Syntax check
 if [ -z "$1" ]; then
  echo "usage <username> <userpass> <master ip>";
  exit 0;
@@ -35,42 +40,21 @@ if [ -z "$3" ]; then
  echo "usage <username> <userpass> <master ip>";
  exit 0;
 fi
-echo "Saving most outputs to /root/install.log";
 
+# Replace yum with dnf for package management
 echo "doing updates and installs"
-yum update -y > /root/install.log
-yum install epel-release -y >> /root/install.log
-yum install bind bind-utils wget -y >> /root/install.log
-
-systemctl start named >> /root/install.log
-systemctl stop named >> /root/install.log
-
-echo "creating user "$1" and adding to wheel"
-useradd -G wheel $1 > /root/install.log
-echo $2 |passwd $1 --stdin  >> /root/install.log
-echo "Disabling root access to ssh use "$1"."
-echo -n "${MAGENTA}Enter SSH port to change (recommended) from ${BLUE}${sshport}${MAGENTA}:${NORMAL} "
-		read customsshport
-		if [ $customsshport ]; then
-			sshport=$customsshport
-		fi
-echo "Your ssh port is ${sshport}"
-sed -i '/PermitRootLogin/ c\PermitRootLogin no' /etc/ssh/sshd_config
-sed -i -e "s/#Port 22/Port ${sshport}/g" /etc/ssh/sshd_config
-sed -i -e 's/#UseDNS yes/UseDNS no/g' /etc/ssh/sshd_config
-systemctl restart sshd  >> /root/install.log
+dnf update -y > /root/install.log
+dnf install epel-release -y >> /root/install.log
+dnf install bind bind-utils tar wget  -y >> /root/install.log
 
 echo "installing and configuring directslave"
 cd ~
-wget -q https://directslave.com/download/directslave-3.4.2-advanced-all.tar.gz >> /root/install.log
-tar -xf directslave-3.4.2-advanced-all.tar.gz
+wget -q https://directslave.com/download/directslave-3.4.3-advanced-all.tar.gz >> /root/install.log
+tar -xf directslave-3.4.3-advanced-all.tar.gz
 mv directslave /usr/local/
 cd /usr/local/directslave/bin
 mv directslave-linux-amd64 directslave
 cd /usr/local/directslave/
-wget -q https://directslave.com/download/directslave-3.2-login-XSS-HOTFIX.tar.gz
-tar -xf directslave-3.2-login-XSS-HOTFIX.tar.gz
-cd /usr/local/directslave
 chown named:named -R /usr/local/directslave
 
 curip="$( hostname -I|awk '{print $1}' )"
