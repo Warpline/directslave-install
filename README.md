@@ -1,49 +1,62 @@
 # directslave-install
-Install free DirectSlave version 3.4.3 for DirectAdmin control panel on AlmaLinux 8 64 bit as free DNS Cluster solutions.
 
-We will work on adding support for more operating systems at a later date.
+**Install free DirectSlave version 3.4.3** for DirectAdmin control panel on AlmaLinux 8 64-bit as a free DNS Cluster solution.
+Support for more operating systems will be added in future updates.
 
-# Aims
-Running DirectSlave as secondary DNS Cluster for DirectAdmin control panel
-<br>Maintain updated documentation / tutorials on how to install & configure DirectSlave GO Advanced
+## Objective
+- Running DirectSlave as a secondary DNS Cluster for the DirectAdmin control panel.
+- Maintain updated documentation/tutorials on installation & configuration of DirectSlave GO Advanced.
 
-# Installing
-Run command:
-<br>chmod +x directslave-install.sh
-<br>./directslave-install.sh (user) (passwd) (IP server DirectAdmin)
-<br>for customize DirectAdmin port, please use :
-<br>./directslave-install.sh (user) (passwd) (IP server DirectAdmin:port number)
+## Installing
+1. Make the script executable:
+```bash
+chmod +x directslave-install.sh
+```
+2. Run the script with the required parameters:
+```bash
+./directslave-install.sh (user) (passwd) (IP server DirectAdmin)
+```
+To customize the DirectAdmin port:
+```bash
+./directslave-install.sh (user) (passwd) (IP server DirectAdmin:port number)
+```
 
-# After installation finished, change named.conf config to following
-On the server DirectSlave
-<br>options {
-<br>	listen-on port 53 { any; };
-<br>    listen-on-v6 port 53 { none; };
+## After Installation
+**On the DirectSlave server**, modify `named.conf` to:
 
-allow-query     { any; };
-<br>              allow-notify    { DirectAdmin_IP_server; };
-<br>              allow-transfer  { DirectAdmin_IP_server; };
+```bash
+options {
+    listen-on port 53 { any; };
+    listen-on-v6 port 53 { none; };
+    allow-query { any; };
+    allow-notify { DirectAdmin_IP_server; };
+    allow-transfer { DirectAdmin_IP_server; };
+}
+```
 <br>
+
+**On the DirectAdmin server**, update `named.conf` to:
+
+```bash
+options {
+    listen-on port 53 { any; };
+    listen-on-v6 port 53 { none; };
+    allow-query { any; };
+    allow-notify { DirectSlave_IP_server_1, DirectSlave_IP_server_2; };
+    allow-transfer { DirectSlave_IP_server_1, DirectSlave_IP_server_2; };
+}
+```
 <br>
 
-On the server DirectAdmin
-<br>options {
-<br>	listen-on port 53 { any; };
-<br>    listen-on-v6 port 53 { none; };
+## What's New?
+- Installation of DirectSlave including version 3.4.3.<br>
+- Root installation check.<br>
+- Transitioned from fail2ban to Firewalld.<br>
+- SSHD port updates.<br>
+- Installation check.<br>
+- Added support for AlmaLinux 8.
 
-allow-query     { any; };
-<br>              allow-notify    { DirectSlave_IP_server_1, DirectSlave_IP_server_2; };
-<br>              allow-transfer  { DirectSlave_IP_server_1, DirectSlave_IP_server_2; };
-
-# What's New? #
-Installing DirectSlave including DirectSlave 3.4.3
-<br>Root install check
-<br>Remove fail2ban and migrate to Firewalld
-<br>SSHD port updating
-<br>Install check
-<br>Added support for AlmaLinux 8
-
-# References #
-Original script by jordivn at https://forum.directadmin.com/showthread.php?t=43924&page=22&p=278112#post278112
-<br>DirectSlave software from https://directslave.com/download
-<br>Updates provided by Warpline Hosting at https://www.warpline.com/
+## References
+- Original script by jordivn: [DirectAdmin Forum Post](https://forum.directadmin.com/showthread.php?t=43924&page=22&p=278112#post278112)
+- DirectSlave software: [Download DirectSlave](https://directslave.com/download)
+- Updates provided by: [Warpline Hosting](https://www.warpline.com/)
