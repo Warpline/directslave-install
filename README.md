@@ -1,9 +1,7 @@
 # directslave-install
-Install free DirectSlave version 3.4.2 for DirectAdmin control panel on CentOS 7 64 bit as free DNS Cluster solutions.
+Install free DirectSlave version 3.4.3 for DirectAdmin control panel on AlmaLinux 8 64 bit as free DNS Cluster solutions.
 
-I have taken it and modified it to work with DirectSlave GO Advanced version dor DirectAdmin. This shell script was installed on CentOS 7 64bit machine all works with NO issues.
-
-If you have another OS you will need a bit to modify the script.
+We will work on adding support for more operating systems at a later date.
 
 # Aims
 Running DirectSlave as secondary DNS Cluster for DirectAdmin control panel
@@ -43,6 +41,8 @@ Installing DirectSlave including DirectSlave 3.2 with XSS patch
 <br>Remove fail2ban and migrate to Firewalld
 <br>SSHD port updating
 <br>Install check
+<br>Added support for AlmaLinux 8
+<br>Updated DirectSlave to latest 3.4.3 version
 
 # References #
 Original script by jordivn at https://forum.directadmin.com/showthread.php?t=43924&page=22&p=278112#post278112
