@@ -1,4 +1,6 @@
-#!/bin/sh
+#!/bin/bash
+set -e
+
 # @author jordavin,phillcoxon,mantas15
 # @updated by Afrizal-id
 # @Forked and updated by Warpline.
@@ -6,14 +8,14 @@
 # @version 1.1.0 (for AlmaLinux 8)
 # ------------------------------------------------------------------------------
 
-sshport=22;
+DIRECTSLAVE_LINK="https://directslave.com/download/directslave-3.4.3-advanced-all.tar.gz"
 
 #Check that user is root.
-if [ “$(id -u)” = “0” ]; then
+if [ "$(id -u)" = "0" ]; then
   printf "Bingo! you are root. Continue on....\n"
 else
   printf "Sorry, This script must be run as root\n"
-  exit;
+  exit 1;
 fi
 
 #What Distro are you on?
@@ -24,32 +26,55 @@ if [ "$OS" = "AlmaLinux" ]; then
   VN=$(cat /etc/redhat-release | awk '{print $3}')
 else
   echo "Installation failed. System runs on unsupported Linux. Exiting...";
-  exit;
+  exit 1;
 fi 
 
-#Syntax check
-if [ -z "$1" ]; then
- echo "usage <username> <userpass> <master ip>";
- exit 0;
+read -p "Enter username: " raw_username
+read -sp "Enter password: " raw_password
+echo ""
+
+# Escape the username and password
+username=$(printf '%q' "$raw_username")
+password=$(printf '%q' "$raw_password")
+
+# Automatically detect the public IP of the server
+detected_ip=$(curl -s https://ipinfo.io/ip)
+
+# Prompt the user for confirmation
+read -p "Detected IP for this server is \"$detected_ip\". Is this correct? [Y/n]: " confirm_ip
+
+# If the user doesn't confirm, prompt them to enter the IP manually
+if [[ "$confirm_ip" =~ ^[Nn]$ ]]; then
+    read -p "Enter IP you want for this server: " master_ip
+else
+    master_ip="$detected_ip"
 fi
-if [ -z "$2" ]; then
- echo "usage <username> <userpass> <master ip>";
- exit 0;
+
+read -p "Enter your email (for Let's Encrypt certificate): " email
+read -p "Enter your domain name (for Let's Encrypt certificate): " domain_name
+# Prompt the user for the desired SSH port
+read -p "Enter the desired SSH port (default is 22): " sshport
+# If the user doesn't provide a port, default to 22
+if [ -z "$sshport" ]; then
+  sshport=22
 fi
-if [ -z "$3" ]; then
- echo "usage <username> <userpass> <master ip>";
- exit 0;
-fi
+
+# Update the /etc/ssh/sshd_config file to set the desired port
+grep -q "^Port" /etc/ssh/sshd_config && sed -i "s/^Port.*/Port $sshport/" /etc/ssh/sshd_config || echo "Port $sshport" >> /etc/ssh/sshd_config
 
 # Replace yum with dnf for package management
 echo "doing updates and installs"
-dnf update -y > /root/install.log
-dnf install epel-release -y >> /root/install.log
-dnf install bind bind-utils tar wget  -y >> /root/install.log
+dnf install epel-release -y | tee -a /root/install.log
+dnf install bind bind-utils tar wget  -y | tee -a /root/install.log
+dnf install certbot -y | tee -a /root/install.log
+
+# Generate Let's Encrypt certificate
+echo "Generating Let's Encrypt certificate..."
+certbot certonly --standalone --agree-tos --no-eff-email --email "$email" -d "$domain_name"
 
 echo "installing and configuring directslave"
 cd ~
-wget -q https://directslave.com/download/directslave-3.4.3-advanced-all.tar.gz >> /root/install.log
+wget -q "$DIRECTSLAVE_LINK" | tee -a /root/install.log
 tar -xf directslave-3.4.3-advanced-all.tar.gz
 mv directslave /usr/local/
 cd /usr/local/directslave/bin
@@ -57,14 +82,27 @@ mv directslave-linux-amd64 directslave
 cd /usr/local/directslave/
 chown named:named -R /usr/local/directslave
 
+# Copying the Let's Encrypt certificate files to /usr/local/directslave/ssl
+mkdir -p /usr/local/directslave/ssl
+cp /etc/letsencrypt/live/"$domain_name"/fullchain.pem /usr/local/directslave/ssl/
+cp /etc/letsencrypt/live/"$domain_name"/privkey.pem /usr/local/directslave/ssl/
+chown named:named /usr/local/directslave/ssl/fullchain.pem
+chown named:named /usr/local/directslave/ssl/privkey.pem
+
+# Generate a random secure key for cookie_auth_key
+COOKIE_AUTH_KEY=$(openssl rand -base64 32)
+
 curip="$( hostname -I|awk '{print $1}' )"
 cat > /usr/local/directslave/etc/directslave.conf <<EOF
 background	1
 host            $curip
-port            2222
-ssl             off
+sslport         2222
+port            2224
+ssl             on
+ssl_cert        /usr/local/directslave/ssl/fullchain.pem
+ssl_key         /usr/local/directslave/ssl/privkey.pem
 cookie_sess_id  DS_SESSID
-cookie_auth_key Change_this_line_to_something_long_&_secure
+cookie_auth_key $COOKIE_AUTH_KEY
 debug           0
 uid             25
 gid             25
@@ -110,8 +148,9 @@ options {
 	recursing-file  "/var/named/data/named.recursing";
 	secroots-file   "/var/named/data/named.secroots";
 		allow-query     { any; };
-		allow-notify	{ $3; };
-		allow-transfer	{ $3; };
+		allow-notify	{ $master_ip; };
+		allow-transfer	{ $master_ip; };
+
 	/*
 	 - If you are building an AUTHORITATIVE DNS server, do NOT enable recursion.
 	 - If you are building a RECURSIVE (caching) DNS server, you need to enable
@@ -148,8 +187,8 @@ EOF
 
 touch /usr/local/directslave/etc/passwd
 chown named:named /usr/local/directslave/etc/passwd
-/usr/local/directslave/bin/directslave --password $1:$2
-/usr/local/directslave/bin/directslave --check  >> /root/install.log
+/usr/local/directslave/bin/directslave --password "$username:$password"
+/usr/local/directslave/bin/directslave --check | tee -a /root/install.log
 rm /usr/local/directslave/run/directslave.pid
 
 cat > /etc/systemd/system/directslave.service <<EOL
@@ -168,29 +207,39 @@ EOL
 echo "setting enabled and starting up"
 chown root:root /etc/systemd/system/directslave.service
 chmod 755 /etc/systemd/system/directslave.service
-systemctl daemon-reload >> /root/install.log
-systemctl enable named >> /root/install.log
-systemctl enable directslave >> /root/install.log
-systemctl restart named >> /root/install.log
-systemctl restart directslave >> /root/install.log
+systemctl daemon-reload | tee -a /root/install.log
+systemctl enable named | tee -a /root/install.log
+systemctl enable directslave | tee -a /root/install.log
+systemctl restart named | tee -a /root/install.log
+systemctl restart directslave | tee -a /root/install.log
 echo "adding simple firewalld and opening Firewalld ports"
-yum update -y > /root/install.log
-yum install firewalld -y >> /root/install.log
+dnf update -y | tee -a /root/install.log
+dnf install firewalld -y | tee -a /root/install.log
 
-systemctl start firewalld >> /root/install.log
-systemctl enable firewalld >> /root/install.log
+systemctl enable firewalld | tee -a /root/install.log
+systemctl start firewalld | tee -a /root/install.log
+firewall-cmd --permanent --add-port=${sshport}/tcp
 firewall-cmd --permanent --add-service=dns
 firewall-cmd --permanent --add-port=2222/tcp
+firewall-cmd --permanent --add-port=80/tcp
 firewall-cmd --permanent --add-port=53/tcp
 firewall-cmd --permanent --add-port=443/tcp
 firewall-cmd --reload
-systemctl start firewalld >> /root/install.log
 
 echo "Checking DirectSlave and starting"
 /usr/local/directslave/bin/directslave --check
 /usr/local/directslave/bin/directslave --run
 
+# Test SSH configuration before restarting
+sshd -t
+if [ $? -ne 0 ]; then
+    echo "Error in SSH configuration. Please check /etc/ssh/sshd_config."
+    exit 1
+fi
+
+# Restart the sshd service
+systemctl restart sshd
+
 echo "all done!"
-echo "Open the DirectSlave Dashboard using a web browser http://your-ip-address:2222"
-echo "if failed browse using IP address, edit /usr/local/directslave/etc/directslave.conf and change the host 127.0.0.1 to your current IP address"
+echo "Open the DirectSlave Dashboard using a web browser https://"$domain_name":2222"
 exit 0;
