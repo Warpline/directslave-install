@@ -1,10 +1,9 @@
 # directslave-install
 
-**Install free DirectSlave version 3.4.3** for DirectAdmin control panel on AlmaLinux 8 64-bit as a free DNS Cluster solution.
-Support for more operating systems will be added in future updates.
+**Install DirectSlave version 3.4.3 with SSL support** for DirectAdmin control panel on AlmaLinux 8 64-bit as a free DNS Cluster solution. This version introduces enhanced security with Let's Encrypt SSL integration and improved user experience.
 
 ## Objective
-- Running DirectSlave as a secondary DNS Cluster for the DirectAdmin control panel.
+- Running DirectSlave as a secondary DNS Cluster for the DirectAdmin control panel with SSL support.
 - Maintain updated documentation/tutorials on installation & configuration of DirectSlave GO Advanced.
 
 ## Installing
@@ -12,14 +11,14 @@ Support for more operating systems will be added in future updates.
 ```bash
 chmod +x directslave-install.sh
 ```
-2. Run the script with the required parameters:
+2. Run the script. It will prompt you for the necessary details:
 ```bash
-./directslave-install.sh (user) (passwd) (IP server DirectAdmin)
+./directslave-install.sh
 ```
-To customize the DirectAdmin port:
-```bash
-./directslave-install.sh (user) (passwd) (IP server DirectAdmin:port number)
-```
+You will be prompted for:
+- Username and password for DirectSlave.
+- Email and domain name for Let's Encrypt certificate.
+- Desired SSH port (default is 22).
 
 ## After Installation
 **On the DirectSlave server**, modify `named.conf` to:
@@ -49,14 +48,17 @@ options {
 <br>
 
 ## What's New?
-- Installation of DirectSlave including version 3.4.3.<br>
-- Root installation check.<br>
-- Transitioned from fail2ban to Firewalld.<br>
-- SSHD port updates.<br>
-- Installation check.<br>
-- Added support for AlmaLinux 8.
+- **SSL Support**: DirectSlave now supports SSL using Let's Encrypt certificates.
+- **Automatic IP Detection**: The script automatically detects the server's IP and confirms it with the user.
+- **User Prompts**: Enhanced user experience with prompts for necessary details.
+- **SSH Configuration Test**: The script tests the SSH configuration to ensure it's correct.
+- **Updated DirectSlave Link**: The script now installs DirectSlave version 3.4.3.
+- **Root Installation Check**: Ensures the script is run as root.
+- **Firewalld Integration**: Transitioned from fail2ban to Firewalld for better security.
+- **SSHD Port Customization**: Allows the user to specify a custom SSH port.
+- **Support for AlmaLinux 8**: Added compatibility for AlmaLinux 8.
 
 ## References
 - Original script by jordivn: [DirectAdmin Forum Post](https://forum.directadmin.com/showthread.php?t=43924&page=22&p=278112#post278112)
 - DirectSlave software: [Download DirectSlave](https://directslave.com/download)
-- Updates provided by: [Warpline Hosting](https://www.warpline.com/)
+- Forked, enhanced, and future updates provided by: [Warpline Hosting](https://www.warpline.com/)
