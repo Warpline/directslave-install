@@ -4,13 +4,14 @@ set -e
 # @author jordavin,phillcoxon,mantas15
 # @updated by Afrizal-id
 # @Forked and updated by Warpline.
-# @date 07.12.2019
+# @date 13.08.2023
 # @version 1.1.0 (for AlmaLinux 8)
 # ------------------------------------------------------------------------------
 
+# DirectSlave download link
 DIRECTSLAVE_LINK="https://directslave.com/download/directslave-3.4.3-advanced-all.tar.gz"
 
-#Check that user is root.
+# Ensure the script is run as root
 if [ "$(id -u)" = "0" ]; then
   printf "Bingo! you are root. Continue on....\n"
 else
@@ -18,8 +19,8 @@ else
   exit 1;
 fi
 
-#What Distro are you on?
-printf "Distro are you on??\n" 2>&1
+# Check the distribution version
+printf "Checking distro..." 2>&1
 OS=$(cat /etc/redhat-release | awk '{print $1}')
 if [ "$OS" = "AlmaLinux" ]; then
   echo "System runs on AlmaLinux 8.X. Checking Continue on....";
@@ -29,27 +30,47 @@ else
   exit 1;
 fi 
 
-read -p "Enter username: " raw_username
-read -sp "Enter password: " raw_password
+# Get user input for username and password
+read -p "Enter username: " username
+read -sp "Enter password: " password
 echo ""
 
-# Escape the username and password
+# Escape special characters in the username and password
 username=$(printf '%q' "$raw_username")
 password=$(printf '%q' "$raw_password")
 
-# Automatically detect the public IP of the server
-detected_ip=$(curl -s https://ipinfo.io/ip)
+# Function to automatically detect the public IP of the server
+detect_ip() {
+    # Try ipinfo.io first
+    detected_ip=$(curl -s https://ipinfo.io/ip)
+    if [ -z "$detected_ip" ]; then
+        # If ipinfo.io fails, try icanhazip.com
+        detected_ip=$(curl -s https://icanhazip.com)
+    fi
+    # If both services fail, return an empty string
+    echo "$detected_ip"
+}
+
+# Use the function to get the detected IP
+detected_ip=$(detect_ip)
+
+# If no IP is detected after trying both services, exit the script
+if [ -z "$detected_ip" ]; then
+    echo "Failed to detect the server's IP. Exiting..."
+    exit 1
+fi
 
 # Prompt the user for confirmation
 read -p "Detected IP for this server is \"$detected_ip\". Is this correct? [Y/n]: " confirm_ip
 
-# If the user doesn't confirm, prompt them to enter the IP manually
+# Confirm detected IP with the user
 if [[ "$confirm_ip" =~ ^[Nn]$ ]]; then
     read -p "Enter IP you want for this server: " master_ip
 else
     master_ip="$detected_ip"
 fi
 
+# Get user input for Let's Encrypt certificate details and SSH port
 read -p "Enter your email (for Let's Encrypt certificate): " email
 read -p "Enter your domain name (for Let's Encrypt certificate): " domain_name
 # Prompt the user for the desired SSH port
@@ -59,11 +80,12 @@ if [ -z "$sshport" ]; then
   sshport=22
 fi
 
-# Update the /etc/ssh/sshd_config file to set the desired port
+# Update SSH port in sshd_config
 grep -q "^Port" /etc/ssh/sshd_config && sed -i "s/^Port.*/Port $sshport/" /etc/ssh/sshd_config || echo "Port $sshport" >> /etc/ssh/sshd_config
 
-# Replace yum with dnf for package management
+# Install necessary packages
 echo "doing updates and installs"
+dnf update -y | tee -a /root/install.log
 dnf install epel-release -y | tee -a /root/install.log
 dnf install bind bind-utils tar wget  -y | tee -a /root/install.log
 dnf install certbot -y | tee -a /root/install.log
@@ -72,6 +94,36 @@ dnf install certbot -y | tee -a /root/install.log
 echo "Generating Let's Encrypt certificate..."
 certbot certonly --standalone --agree-tos --no-eff-email --email "$email" -d "$domain_name"
 
+# Write the directslave-certrenew.sh script to /etc/letsencrypt directory
+cat > /etc/letsencrypt/directslave-certrenew.sh <<EOL
+#!/bin/bash
+
+# Get domain name and email from arguments
+domain_name="\$1"
+email="\$2"
+
+# Renew the Let's Encrypt SSL certificate using Certbot
+certbot renew --standalone --agree-tos --no-eff-email --email "\$email" -d "\$domain_name"
+
+# Update the SSL certificates for DirectSlave
+cp /etc/letsencrypt/live/"\$domain_name"/fullchain.pem /usr/local/directslave/ssl/
+cp /etc/letsencrypt/live/"\$domain_name"/privkey.pem /usr/local/directslave/ssl/
+chown named:named /usr/local/directslave/ssl/fullchain.pem
+chown named:named /usr/local/directslave/ssl/privkey.pem
+
+# Restart the DirectSlave service to apply the new certificates
+systemctl restart directslave
+
+echo "SSL certificate renewal for DirectSlave completed."
+EOL
+
+# Make the script executable
+chmod +x /etc/letsencrypt/directslave-certrenew.sh
+
+# Add a cronjob to run the renewal script every two months, passing the domain_name and email as arguments
+echo "0 0 1 */2 * root /etc/letsencrypt/directslave-certrenew.sh $domain_name $email" >> /etc/crontab
+
+# Install and configure DirectSlave
 echo "installing and configuring directslave"
 cd ~
 wget -q "$DIRECTSLAVE_LINK" | tee -a /root/install.log
@@ -82,7 +134,7 @@ mv directslave-linux-amd64 directslave
 cd /usr/local/directslave/
 chown named:named -R /usr/local/directslave
 
-# Copying the Let's Encrypt certificate files to /usr/local/directslave/ssl
+# Set up SSL for DirectSlave using Let's Encrypt certificates
 mkdir -p /usr/local/directslave/ssl
 cp /etc/letsencrypt/live/"$domain_name"/fullchain.pem /usr/local/directslave/ssl/
 cp /etc/letsencrypt/live/"$domain_name"/privkey.pem /usr/local/directslave/ssl/
@@ -92,6 +144,7 @@ chown named:named /usr/local/directslave/ssl/privkey.pem
 # Generate a random secure key for cookie_auth_key
 COOKIE_AUTH_KEY=$(openssl rand -base64 32)
 
+# Configure DirectSlave
 curip="$( hostname -I|awk '{print $1}' )"
 cat > /usr/local/directslave/etc/directslave.conf <<EOF
 background	1
@@ -118,7 +171,7 @@ named_format    text
 authfile        /usr/local/directslave/etc/passwd
 EOF
 
-#mkdir /etc/namedb
+# Set up named (BIND) configuration
 mkdir -p /etc/namedb/secondary
 touch /etc/namedb/secondary/named.conf
 touch /etc/namedb/directslave.inc
@@ -185,12 +238,13 @@ include "/etc/named.root.key";
 include "/etc/namedb/directslave.inc";
 EOF
 
+# Set DirectSlave password and check its configuration
 touch /usr/local/directslave/etc/passwd
 chown named:named /usr/local/directslave/etc/passwd
 /usr/local/directslave/bin/directslave --password "$username:$password"
 /usr/local/directslave/bin/directslave --check | tee -a /root/install.log
-rm /usr/local/directslave/run/directslave.pid
 
+# Create DirectSlave systemd service
 cat > /etc/systemd/system/directslave.service <<EOL
 [Unit]
 Description=DirectSlave for DirectAdmin
@@ -204,6 +258,7 @@ Restart=always
 WantedBy=multi-user.target
 EOL
 
+# Enable and start services
 echo "setting enabled and starting up"
 chown root:root /etc/systemd/system/directslave.service
 chmod 755 /etc/systemd/system/directslave.service
@@ -212,34 +267,35 @@ systemctl enable named | tee -a /root/install.log
 systemctl enable directslave | tee -a /root/install.log
 systemctl restart named | tee -a /root/install.log
 systemctl restart directslave | tee -a /root/install.log
-echo "adding simple firewalld and opening Firewalld ports"
-dnf update -y | tee -a /root/install.log
-dnf install firewalld -y | tee -a /root/install.log
 
+# Set up and start firewalld
+echo "Adding simple firewalld and opening required firewalld ports..."
+dnf install firewalld -y | tee -a /root/install.log
 systemctl enable firewalld | tee -a /root/install.log
 systemctl start firewalld | tee -a /root/install.log
 firewall-cmd --permanent --add-port=${sshport}/tcp
 firewall-cmd --permanent --add-service=dns
 firewall-cmd --permanent --add-port=2222/tcp
 firewall-cmd --permanent --add-port=80/tcp
-firewall-cmd --permanent --add-port=53/tcp
 firewall-cmd --permanent --add-port=443/tcp
 firewall-cmd --reload
 
+# Check DirectSlave and start it
 echo "Checking DirectSlave and starting"
 /usr/local/directslave/bin/directslave --check
 /usr/local/directslave/bin/directslave --run
 
-# Test SSH configuration before restarting
+# Test SSH configuration
 sshd -t
 if [ $? -ne 0 ]; then
     echo "Error in SSH configuration. Please check /etc/ssh/sshd_config."
     exit 1
 fi
 
-# Restart the sshd service
+# Restart SSH service
 systemctl restart sshd
 
+# Completion message
 echo "all done!"
 echo "Open the DirectSlave Dashboard using a web browser https://"$domain_name":2222"
 exit 0;
