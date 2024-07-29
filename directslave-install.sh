@@ -19,6 +19,14 @@ else
   exit 1;
 fi
 
+# Check SELinux status
+selinux_status=$(getenforce)
+
+if [ "$selinux_status" != "Disabled" ]; then
+  echo "SELinux is currently $selinux_status. Please disable SELinux in /etc/selinux/config and run the script again."
+  exit 1
+fi
+
 # Check the distribution version
 printf "Checking distro..." 2>&1
 OS=$(cat /etc/redhat-release | awk '{print $1}')
@@ -89,6 +97,18 @@ dnf update -y | tee -a /root/install.log
 dnf install epel-release -y | tee -a /root/install.log
 dnf install bind bind-utils tar wget  -y | tee -a /root/install.log
 dnf install certbot -y | tee -a /root/install.log
+
+# Set up and start firewalld
+echo "Adding simple firewalld and opening required firewalld ports..."
+dnf install firewalld -y | tee -a /root/install.log
+systemctl enable firewalld | tee -a /root/install.log
+systemctl start firewalld | tee -a /root/install.log
+firewall-cmd --permanent --add-port=${sshport}/tcp
+firewall-cmd --permanent --add-service=dns
+firewall-cmd --permanent --add-port=2222/tcp
+firewall-cmd --permanent --add-port=80/tcp
+firewall-cmd --permanent --add-port=443/tcp
+firewall-cmd --reload
 
 # Generate Let's Encrypt certificate
 echo "Generating Let's Encrypt certificate..."
@@ -267,18 +287,6 @@ systemctl enable named | tee -a /root/install.log
 systemctl enable directslave | tee -a /root/install.log
 systemctl restart named | tee -a /root/install.log
 systemctl restart directslave | tee -a /root/install.log
-
-# Set up and start firewalld
-echo "Adding simple firewalld and opening required firewalld ports..."
-dnf install firewalld -y | tee -a /root/install.log
-systemctl enable firewalld | tee -a /root/install.log
-systemctl start firewalld | tee -a /root/install.log
-firewall-cmd --permanent --add-port=${sshport}/tcp
-firewall-cmd --permanent --add-service=dns
-firewall-cmd --permanent --add-port=2222/tcp
-firewall-cmd --permanent --add-port=80/tcp
-firewall-cmd --permanent --add-port=443/tcp
-firewall-cmd --reload
 
 # Check DirectSlave and start it
 echo "Checking DirectSlave and starting"
